@@ -98,7 +98,8 @@ public class PlayerManager implements Listener {
 	
 	@EventHandler
 	public void onPlayerJoin(PlayerJoinEvent e) {
-		Player player = e.getPlayer();
+        e.setJoinMessage(null);
+        Player player = e.getPlayer();
 		
 		SpleefPlayer spleefPlayer = new SpleefPlayer(player, heavySpleef);
 		onlineSpleefPlayers.add(spleefPlayer);
@@ -106,7 +107,8 @@ public class PlayerManager implements Listener {
 	
 	@EventHandler(priority = EventPriority.MONITOR)
 	public void onPlayerQuit(PlayerQuitEvent e) {
-		handlePlayerLeave(e.getPlayer());
+        e.setQuitMessage(null);
+        handlePlayerLeave(e.getPlayer());
 	}
 	
 	@EventHandler(priority = EventPriority.MONITOR)

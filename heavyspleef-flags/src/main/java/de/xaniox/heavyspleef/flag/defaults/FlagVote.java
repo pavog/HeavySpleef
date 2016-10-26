@@ -18,7 +18,10 @@
 package de.xaniox.heavyspleef.flag.defaults;
 
 import com.google.common.collect.Sets;
-import de.xaniox.heavyspleef.commands.base.*;
+import de.xaniox.heavyspleef.commands.base.Command;
+import de.xaniox.heavyspleef.commands.base.CommandContext;
+import de.xaniox.heavyspleef.commands.base.CommandException;
+import de.xaniox.heavyspleef.commands.base.PlayerOnly;
 import de.xaniox.heavyspleef.core.HeavySpleef;
 import de.xaniox.heavyspleef.core.Permissions;
 import de.xaniox.heavyspleef.core.Unregister;
@@ -45,6 +48,7 @@ import de.xaniox.heavyspleef.core.layout.SignLayout;
 import de.xaniox.heavyspleef.core.player.SpleefPlayer;
 import de.xaniox.heavyspleef.flag.presets.BaseFlag;
 import org.bukkit.Bukkit;
+import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
@@ -74,6 +78,10 @@ public class FlagVote extends BaseFlag {
 	@PlayerOnly
 	public static void onVoteCommand(CommandContext context, HeavySpleef heavySpleef) throws CommandException {
 		Player bukkitPlayer = context.getSender();
+
+		bukkitPlayer.sendMessage(ChatColor.GREEN + "Das Vote-Feature wurde entfernt.");
+		return;
+		/*
 		SpleefPlayer player = heavySpleef.getSpleefPlayer(bukkitPlayer);
 		
 		GameManager manager = heavySpleef.getGameManager();
@@ -92,6 +100,7 @@ public class FlagVote extends BaseFlag {
 		FlagVote flag = game.getFlag(FlagVote.class);
 		boolean success = flag.vote(player, game);
 		player.sendMessage(i18n.getString(success ? Messages.Command.SUCCESSFULLY_VOTED : Messages.Command.ALREADY_VOTED));
+		*/
 	}
 	
 	@FlagInit
@@ -127,7 +136,10 @@ public class FlagVote extends BaseFlag {
 	
 	@Subscribe(priority = Subscribe.Priority.MONITOR)
 	public void onPlayerJoin(PlayerJoinGameEvent event) {
-		checkVotes(event.getGame());
+		//checkVotes(event.getGame());
+		// start the game if there are 2 or more players.
+		if (Bukkit.getOnlinePlayers().size() >= 2)
+			event.getGame().countdown();
 	}
 	
 	@Subscribe(priority = Subscribe.Priority.MONITOR)

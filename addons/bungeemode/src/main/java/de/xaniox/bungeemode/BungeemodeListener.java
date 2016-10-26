@@ -33,7 +33,6 @@ import de.xaniox.heavyspleef.core.player.SpleefPlayer;
 import de.xaniox.heavyspleef.flag.defaults.FlagSpectate;
 import de.xaniox.heavyspleef.flag.defaults.FlagSpectate.SpectateLeaveEvent;
 import org.bukkit.Bukkit;
-import org.bukkit.Server;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -44,11 +43,7 @@ import org.bukkit.event.server.ServerListPingEvent;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
-import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.logging.Level;
 
 public class BungeemodeListener implements Listener, SpleefListener {
@@ -331,7 +326,8 @@ public class BungeemodeListener implements Listener, SpleefListener {
 	}
 	
 	private boolean restartServer() {
-		Server.Spigot spigot = Bukkit.spigot();
+        /*
+        Server.Spigot spigot = Bukkit.spigot();
 		
 		try {
 			spigot.getClass().getMethod("restart");
@@ -357,6 +353,8 @@ public class BungeemodeListener implements Listener, SpleefListener {
 				return false;
 			}
 		}
+		*/
+        return true;
 	}
 	
 }
