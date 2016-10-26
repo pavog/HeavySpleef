@@ -48,198 +48,222 @@ import java.util.logging.Level;
 
 public class BungeemodeListener implements Listener, SpleefListener {
 
-	private BungeemodeAddon addon;
-	private boolean restarting;
-	
-	public BungeemodeListener(BungeemodeAddon addon) {
-		this.addon = addon;
-	}
-	
-	public boolean isRestarting() {
-		return restarting;
-	}
-	
-	@EventHandler(priority = EventPriority.HIGH)
-	public void onPlayerJoin(PlayerJoinEvent event) {
-		BungeemodeConfig config = addon.getConfig();
-		
-		if (!config.isEnabled()) {
-			return;
-		}
-		
-		String gameName = config.getGame();
-		GameManager manager = addon.getHeavySpleef().getGameManager();
-		SpleefPlayer player = addon.getHeavySpleef().getSpleefPlayer(event.getPlayer());
-		
-		if (!manager.hasGame(gameName)) {
-			addon.getLogger().log(Level.WARNING, "Cannot handle player join for '" + player.getName() + "': Game " + gameName + " does not exist!");
-			return;
-		}
-		
-		Game game = manager.getGame(gameName);
-		if (restarting) {
-			//Don't join the game when we're restarting
-			return;
-		}
-		
-		try {
-			game.getJoinRequester().request(player, new JoinFutureCallback() {
-				
-				@Override
-				public void onJoin(SpleefPlayer player, Game game, JoinResult result) {
-					handleJoinResult(player, game, result);
-				}
-			});
-            game.countdown();
+    private BungeemodeAddon addon;
+    private boolean restarting;
+
+    private boolean countdown_started = false;
+    private int countdown = 31;
+    private int countdown_task = 0;
+
+    public BungeemodeListener(BungeemodeAddon addon) {
+        this.addon = addon;
+    }
+
+    public boolean isRestarting() {
+        return restarting;
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        BungeemodeConfig config = addon.getConfig();
+
+        if (!config.isEnabled()) {
+            return;
+        }
+
+        String gameName = config.getGame();
+        GameManager manager = addon.getHeavySpleef().getGameManager();
+        SpleefPlayer player = addon.getHeavySpleef().getSpleefPlayer(event.getPlayer());
+
+        if (!manager.hasGame(gameName)) {
+            addon.getLogger().log(Level.WARNING, "Cannot handle player join for '" + player.getName() + "': Game " + gameName + " does not exist!");
+            return;
+        }
+
+        Game game = manager.getGame(gameName);
+        if (restarting) {
+            //Don't join the game when we're restarting
+            return;
+        }
+
+        try {
+            game.getJoinRequester().request(player, new JoinFutureCallback() {
+
+                @Override
+                public void onJoin(SpleefPlayer player, Game game, JoinResult result) {
+                    handleJoinResult(player, game, result);
+                }
+            });
         } catch (JoinValidationException e) {
-			handleJoinResult(player, game, e.getResult());
-		}
-	}
-	
-	private void handleJoinResult(SpleefPlayer player, Game game, JoinResult result) {
-		if (result == JoinResult.ALLOW) {
-			return;
-		}
-		
-		if (game.isFlagPresent(FlagSpectate.class)) {
-			FlagSpectate spectate = game.getFlag(FlagSpectate.class);
-			spectate.spectate(player, game);
-			player.sendMessage(addon.getI18n().getVarString(Messages.Player.PLAYER_SPECTATE)
-					.setVariable("game", game.getName())
-					.toString());
-		} else {
-			String message = addon.getI18n().getString(BungeemodeMessages.KICK_MESSAGE_INGAME);
-			player.getBukkitPlayer().kickPlayer(message);
-		}
-	}
-	
-	@EventHandler(priority = EventPriority.HIGH)
-	public void onPlayerPreJoin(AsyncPlayerPreLoginEvent event) {
-		BungeemodeConfig config = addon.getConfig();
-		
-		if (!config.isEnabled()) {
-			return;
-		}
-		
-		if (!addon.getHeavySpleef().isGamesLoaded()) {
+            handleJoinResult(player, game, e.getResult());
+        }
+    }
+
+    private void handleJoinResult(SpleefPlayer player, final Game game, JoinResult result) {
+        if (result == JoinResult.ALLOW) {
+            if (!this.countdown_started) {
+                if (Bukkit.getOnlinePlayers().size() >= 2) {
+                    this.countdown_started = true;
+                    this.countdown_task = Bukkit.getScheduler().scheduleSyncRepeatingTask(addon.getHeavySpleef().getPlugin(), new Runnable() {
+                        @Override
+                        public void run() {
+                            countdown = countdown - 1;
+                            if (countdown <= 0) {
+                                Bukkit.getScheduler().cancelTask(countdown_task);
+                                boolean countdown = game.countdown();
+                            }
+                            if (countdown % 5 == 0 || (countdown <= 5 && countdown > 0))
+                                game.broadcast(BroadcastTarget.INGAME, addon.getI18n().getVarString(Messages.Broadcast.GAME_COUNTDOWN_MESSAGE)
+                                        .setVariable("remaining", String.valueOf(countdown))
+                                        .toString());
+                        }
+                    }, 0L, 20L);
+                }
+            }
+
+
+            return;
+        }
+
+        if (game.isFlagPresent(FlagSpectate.class)) {
+            FlagSpectate spectate = game.getFlag(FlagSpectate.class);
+            spectate.spectate(player, game);
+            player.sendMessage(addon.getI18n().getVarString(Messages.Player.PLAYER_SPECTATE)
+                    .setVariable("game", game.getName())
+                    .toString());
+        } else {
+            String message = addon.getI18n().getString(BungeemodeMessages.KICK_MESSAGE_INGAME);
+            player.getBukkitPlayer().kickPlayer(message);
+        }
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onPlayerPreJoin(AsyncPlayerPreLoginEvent event) {
+        BungeemodeConfig config = addon.getConfig();
+
+        if (!config.isEnabled()) {
+            return;
+        }
+
+        if (!addon.getHeavySpleef().isGamesLoaded()) {
             event.setLoginResult(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
             event.setKickMessage(addon.getI18n().getString(BungeemodeMessages.KICK_MESSAGE_NOT_YET_READY));
             return;
         }
 
         String gameName = config.getGame();
-		GameManager manager = addon.getHeavySpleef().getGameManager();
-		
-		if (!manager.hasGame(gameName)) {
-			addon.getLogger().log(Level.WARNING, "Cannot handle player pre login for '" + event.getName() + "': Game " + gameName + " does not exist!");
-			return;
-		}
-		
-		Game game = manager.getGame(gameName);
-		
-		if (!game.getGameState().isGameEnabled()) {
-			event.setLoginResult(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
-			event.setKickMessage(addon.getI18n().getString(BungeemodeMessages.KICK_MESSAGE_DISABLED));
-			return;
-		}
-		
-		boolean joinOnCountdown = game.getPropertyValue(GameProperty.JOIN_ON_COUNTDOWN);
-		if (game.getGameState() == GameState.INGAME || ((game.getGameState() == GameState.STARTING
+        GameManager manager = addon.getHeavySpleef().getGameManager();
+
+        if (!manager.hasGame(gameName)) {
+            addon.getLogger().log(Level.WARNING, "Cannot handle player pre login for '" + event.getName() + "': Game " + gameName + " does not exist!");
+            return;
+        }
+
+        Game game = manager.getGame(gameName);
+
+        if (!game.getGameState().isGameEnabled()) {
+            event.setLoginResult(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
+            event.setKickMessage(addon.getI18n().getString(BungeemodeMessages.KICK_MESSAGE_DISABLED));
+            return;
+        }
+
+        boolean joinOnCountdown = game.getPropertyValue(GameProperty.JOIN_ON_COUNTDOWN);
+        if (game.getGameState() == GameState.INGAME || ((game.getGameState() == GameState.STARTING
                 || game.getGameState() == GameState.WARMUP) && !joinOnCountdown)) {
-			if (config.getSpectateWhenIngame()) {
-				if (game.isFlagPresent(FlagSpectate.class)) {
-					return;
-				} else {
-					addon.getLogger().log(Level.WARNING,
-							"Cannot transfer the player " + event.getName() + " into spectate mode: No spectate flag/point has been set");
-				}
-			}
-			
-			event.setLoginResult(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
-			event.setKickMessage(addon.getI18n().getString(BungeemodeMessages.KICK_MESSAGE_INGAME));
-			return;
-		}
-	}
-	
-	@Subscribe(priority = Priority.MONITOR)
-	public void onPlayerLeftGame(PlayerLeftGameEvent event) {
-		BungeemodeConfig config = addon.getConfig();
-		if (!config.isEnabled() || (config.getSendBackOn() != SendBackCriteria.LOSE && event.getGame().getGameState().isGameActive())) {
-			return;
-		}
-		
-		handleSendBack(event.getPlayer(), config.getSendBackTo());
-	}
-	
-	@Subscribe
-	public void onQueueFlush(PlayerQueueFlushEvent event) {
-		BungeemodeConfig config = addon.getConfig();
-		
-		if (!config.isEnabled()) {
-			return;
-		}
-		
-		event.setResult(FlushResult.DENY);
-	}
-	
-	@Subscribe(priority = Priority.MONITOR)
-	public void onGameEnd(final GameEndEvent event) {
-		final BungeemodeConfig config = addon.getConfig();
-		if (!config.isEnabled()) {
-			return;
-		}
-		
-		DefaultConfig defaultConfig = addon.getHeavySpleef().getConfiguration(ConfigType.DEFAULT_CONFIG);
-		final GeneralSection generalSection = defaultConfig.getGeneralSection();
-		restarting = true;
-		
-		if (addon.getHeavySpleef().getPlugin().isEnabled()) {
-			int restartCountdown = config.getRestartCountdown();
-			
-			new CountdownTask(addon.getHeavySpleef().getPlugin(), restartCountdown, new CountdownTask.CountdownCallback() {
-				
-				@Override
-				public void onCountdownFinish(CountdownTask task) {
-					Bukkit.broadcastMessage(generalSection.getSpleefPrefix() + " " + addon.getI18n().getString(BungeemodeMessages.SERVER_RESTART));
-					
-					for (Player player : Bukkit.getOnlinePlayers()) {
-						SpleefPlayer spleefPlayer = addon.getHeavySpleef().getSpleefPlayer(player);
-						handleSendBack(spleefPlayer, config.getSendBackTo());
-					}
-					
-					if (config.isRestart()) {
-						Bukkit.getScheduler().runTaskLater(addon.getHeavySpleef().getPlugin(), new Runnable() {
-							
-							@Override
-							public void run() {								
-								restartServer();
-								restarting = false;
-							}
-						}, 10L);
-					} else {
-						restarting = false;
-					}
-				}
-				
-				@Override
-				public void onCountdownCount(CountdownTask task) {
-					int remaining = task.getRemaining();
-					
-					if (remaining % 10 == 0 || remaining <= 5) {
-						Bukkit.broadcastMessage(generalSection.getSpleefPrefix() + " "
-								+ addon.getI18n().getVarString(BungeemodeMessages.SERVER_RESTART_COUNTDOWN)
-										.setVariable("left", String.valueOf(remaining)).toString());
-					}
-				}
-			}).start();
-			
-			if (restartCountdown > 0) {
-				Bukkit.broadcastMessage(generalSection.getSpleefPrefix() + " "
-						+ addon.getI18n().getVarString(BungeemodeMessages.SERVER_RESTART_COUNTDOWN)
-								.setVariable("left", String.valueOf(restartCountdown)).toString());
-			}
-		}
-	}
+            if (config.getSpectateWhenIngame()) {
+                if (game.isFlagPresent(FlagSpectate.class)) {
+                    return;
+                } else {
+                    addon.getLogger().log(Level.WARNING,
+                            "Cannot transfer the player " + event.getName() + " into spectate mode: No spectate flag/point has been set");
+                }
+            }
+
+            event.setLoginResult(AsyncPlayerPreLoginEvent.Result.KICK_OTHER);
+            event.setKickMessage(addon.getI18n().getString(BungeemodeMessages.KICK_MESSAGE_INGAME));
+            return;
+        }
+    }
+
+    @Subscribe(priority = Priority.MONITOR)
+    public void onPlayerLeftGame(PlayerLeftGameEvent event) {
+        BungeemodeConfig config = addon.getConfig();
+        if (!config.isEnabled() || (config.getSendBackOn() != SendBackCriteria.LOSE && event.getGame().getGameState().isGameActive())) {
+            return;
+        }
+
+        handleSendBack(event.getPlayer(), config.getSendBackTo());
+    }
+
+    @Subscribe
+    public void onQueueFlush(PlayerQueueFlushEvent event) {
+        BungeemodeConfig config = addon.getConfig();
+
+        if (!config.isEnabled()) {
+            return;
+        }
+
+        event.setResult(FlushResult.DENY);
+    }
+
+    @Subscribe(priority = Priority.MONITOR)
+    public void onGameEnd(final GameEndEvent event) {
+        final BungeemodeConfig config = addon.getConfig();
+        if (!config.isEnabled()) {
+            return;
+        }
+
+        DefaultConfig defaultConfig = addon.getHeavySpleef().getConfiguration(ConfigType.DEFAULT_CONFIG);
+        final GeneralSection generalSection = defaultConfig.getGeneralSection();
+        restarting = true;
+
+        if (addon.getHeavySpleef().getPlugin().isEnabled()) {
+            int restartCountdown = config.getRestartCountdown();
+
+            new CountdownTask(addon.getHeavySpleef().getPlugin(), restartCountdown, new CountdownTask.CountdownCallback() {
+
+                @Override
+                public void onCountdownFinish(CountdownTask task) {
+                    Bukkit.broadcastMessage(generalSection.getSpleefPrefix() + " " + addon.getI18n().getString(BungeemodeMessages.SERVER_RESTART));
+
+                    for (Player player : Bukkit.getOnlinePlayers()) {
+                        SpleefPlayer spleefPlayer = addon.getHeavySpleef().getSpleefPlayer(player);
+                        handleSendBack(spleefPlayer, config.getSendBackTo());
+                    }
+
+                    if (config.isRestart()) {
+                        Bukkit.getScheduler().runTaskLater(addon.getHeavySpleef().getPlugin(), new Runnable() {
+
+                            @Override
+                            public void run() {
+                                restartServer();
+                                restarting = false;
+                            }
+                        }, 10L);
+                    } else {
+                        restarting = false;
+                    }
+                }
+
+                @Override
+                public void onCountdownCount(CountdownTask task) {
+                    int remaining = task.getRemaining();
+
+                    if (remaining % 10 == 0 || remaining <= 5) {
+                        Bukkit.broadcastMessage(generalSection.getSpleefPrefix() + " "
+                                + addon.getI18n().getVarString(BungeemodeMessages.SERVER_RESTART_COUNTDOWN)
+                                .setVariable("left", String.valueOf(remaining)).toString());
+                    }
+                }
+            }).start();
+
+            if (restartCountdown > 0) {
+                Bukkit.broadcastMessage(generalSection.getSpleefPrefix() + " "
+                        + addon.getI18n().getVarString(BungeemodeMessages.SERVER_RESTART_COUNTDOWN)
+                        .setVariable("left", String.valueOf(restartCountdown)).toString());
+            }
+        }
+    }
 
     @EventHandler
     public void onServerListPing(ServerListPingEvent event) {
@@ -290,43 +314,43 @@ public class BungeemodeListener implements Listener, SpleefListener {
         String motd = addon.getI18n().getString(motdKey);
         event.setMotd(motd);
     }
-	
-	@Subscribe
-	public void onPlayerLeaveSpectate(SpectateLeaveEvent event) {
-		final BungeemodeConfig config = addon.getConfig();
-		if (!config.isEnabled()) {
-			return;
-		}
-		
-		if (!event.getGame().getName().equalsIgnoreCase(config.getGame())) {
-			return;
-		}
-		
-		SpleefPlayer player = event.getPlayer();
-		if (addon.getSendBackExceptions().contains(player)) {
-			return;
-		}
-		
-		addon.getSendBackExceptions().remove(player);
-		handleSendBack(player, config.getSendBackTo());
-	}
-	
-	private void handleSendBack(SpleefPlayer player, String server) {
-		ByteArrayOutputStream baos = new ByteArrayOutputStream();
-		DataOutputStream out = new DataOutputStream(baos);
-		
-		try {
-			out.writeUTF("Connect");
-			out.writeUTF(server);
-		} catch (IOException e) {
-			addon.getLogger().log(Level.SEVERE, "Failed to send player " + player.getName() + " back to the server '" + server + "'", e);
-		}
-		
-		byte[] message = baos.toByteArray();
-		player.getBukkitPlayer().sendPluginMessage(addon.getHeavySpleef().getPlugin(), BungeemodeAddon.BUNGEECORD_CHANNEL, message);
-	}
-	
-	private boolean restartServer() {
+
+    @Subscribe
+    public void onPlayerLeaveSpectate(SpectateLeaveEvent event) {
+        final BungeemodeConfig config = addon.getConfig();
+        if (!config.isEnabled()) {
+            return;
+        }
+
+        if (!event.getGame().getName().equalsIgnoreCase(config.getGame())) {
+            return;
+        }
+
+        SpleefPlayer player = event.getPlayer();
+        if (addon.getSendBackExceptions().contains(player)) {
+            return;
+        }
+
+        addon.getSendBackExceptions().remove(player);
+        handleSendBack(player, config.getSendBackTo());
+    }
+
+    private void handleSendBack(SpleefPlayer player, String server) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        DataOutputStream out = new DataOutputStream(baos);
+
+        try {
+            out.writeUTF("Connect");
+            out.writeUTF(server);
+        } catch (IOException e) {
+            addon.getLogger().log(Level.SEVERE, "Failed to send player " + player.getName() + " back to the server '" + server + "'", e);
+        }
+
+        byte[] message = baos.toByteArray();
+        player.getBukkitPlayer().sendPluginMessage(addon.getHeavySpleef().getPlugin(), BungeemodeAddon.BUNGEECORD_CHANNEL, message);
+    }
+
+    private boolean restartServer() {
         /*
         Server.Spigot spigot = Bukkit.spigot();
 		
@@ -357,6 +381,6 @@ public class BungeemodeListener implements Listener, SpleefListener {
 		*/
         Bukkit.shutdown();
         return true;
-	}
-	
+    }
+
 }
