@@ -90,7 +90,8 @@ public class BungeemodeListener implements Listener, SpleefListener {
 					handleJoinResult(player, game, result);
 				}
 			});
-		} catch (JoinValidationException e) {
+            game.countdown();
+        } catch (JoinValidationException e) {
 			handleJoinResult(player, game, e.getResult());
 		}
 	}
@@ -354,6 +355,7 @@ public class BungeemodeListener implements Listener, SpleefListener {
 			}
 		}
 		*/
+        Bukkit.shutdown();
         return true;
 	}
 	
